@@ -27,7 +27,7 @@ async function github(env, method, path, body) {
     },
     body: body && JSON.stringify(body),
   });
-  if (!r.ok) throw new Error(`GitHub ${r.status}`);
+  if (!r.ok) throw Object.assign(new Error(`GitHub ${r.status}`), { status: r.status });
   return r.json();
 }
 
@@ -51,9 +51,11 @@ export default {
     if (!entries.length || entries.length > MAX_ENTRIES) return reply(400, "bad entry count");
     if (!entries.every((l) => ENTRY.test(l))) return reply(400, "malformed entry");
 
-    const id = `${new Date().toISOString().slice(0, 10)}-${crypto.randomUUID()}`;
     const body = [lines[0], ...entries].join("\n") + "\n";
     const bytes = new TextEncoder().encode(body);
+    // Named by content: a list sent again (the app quit before it saw the reply) replaces nothing and adds no source.
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+    const id = [...digest.slice(0, 16)].map((b) => b.toString(16).padStart(2, "0")).join("");
     let bin = "";
     for (const b of bytes) bin += String.fromCharCode(b);
     try {
@@ -63,6 +65,7 @@ export default {
         branch: "incoming",
       });
     } catch (e) {
+      if (e.status === 422) return reply(200, `received ${entries.length} (already)`);
       return reply(502, "could not store the submission");
     }
     return reply(200, `received ${entries.length}`);
