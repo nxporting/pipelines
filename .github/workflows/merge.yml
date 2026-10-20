@@ -1,0 +1,49 @@
+name: merge
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: merge
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: main
+      - uses: actions/checkout@v4
+        with:
+          ref: incoming
+          path: incoming
+      - name: Install the merge tool
+        run: cargo install --locked --git https://github.com/nxporting/nxport nxport-pipelines
+      - name: Merge submissions
+        run: |
+          mkdir -p main/lists
+          for dir in incoming/submissions/*/; do
+            [ -d "$dir" ] || continue
+            title=$(basename "$dir")
+            case "$title" in *[!0-9a-f]*) continue ;; esac
+            list="main/lists/$title.txt"
+            keep=(); [ -f "$list" ] && keep=(--keep "$list")
+            nxport-pipelines merge "${keep[@]}" --min-sources 2 --max-per-source 4000 -o "$list" "$dir"*.txt
+          done
+      - name: Publish
+        working-directory: main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git add lists
+          if ! git diff --cached --quiet; then
+            git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -q -m "Merge submissions"
+            git push
+          fi
+          ls lists/*.txt >/dev/null 2>&1 || exit 0
+          gh release view latest >/dev/null 2>&1 || gh release create latest --title "Pipeline lists" --notes ""
+          gh release upload latest lists/*.txt --clobber
