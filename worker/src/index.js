@@ -8,10 +8,16 @@ const HEADER = /^# nxport pipelines title ([0-9a-f]{16}) build ([0-9a-f]{1,64}|-
 const NAME = "s_[0-9a-f]{16}";
 const HEX = "[0-9a-f]{1,16}";
 const LIST = (item) => `(?:\\.|${item}(?:,${item}){0,31})`;
-const ENTRY = new RegExp(
+const FMT = "[0-9a-f]{1,3}:[0-9a-f]{1,3}";
+const P1 =
   `^p1 ${NAME} (?:${NAME}|-) ${HEX} [01] [01] ${HEX} ${HEX} [0-9]{1,4} ` +
-    `[0-9]{1,4}(?:,[0-9]{1,4}){7} ${HEX}(?:,${HEX}){7} ${LIST(`(?:${HEX}|-)`)} ${LIST(HEX)}$`,
-);
+  `[0-9]{1,4}(?:,[0-9]{1,4}){7} ${HEX}(?:,${HEX}){7} ${LIST(`(?:${HEX}|-)`)} ${LIST(HEX)}$`;
+// p2: targets by NVN format (texture:view), samples, draw mode, restart, polygon, depth-stencil, multisample, depth clamp.
+const P2 =
+  `^p2 ${NAME} (?:${NAME}|-) ${HEX} [01] [01] ${HEX} ${HEX} ${FMT}(?:,${FMT}){7} ${FMT} ${HEX} ${HEX} [01] ` +
+  `${HEX} ${HEX} ${HEX} [01] ${HEX}(?:,${HEX}){7} ${LIST(`(?:${HEX}|-)`)} ${LIST(HEX)}$`;
+// Either may end in " t": the pipeline's draws ran as tiny passes (nxport-pipelines lib.rs).
+const ENTRY = new RegExp(`(?:${P1})|(?:${P2})`.replaceAll("$", "(?: t)?$"));
 
 function reply(status, text) {
   return new Response(text + "\n", { status, headers: { "content-type": "text/plain" } });
